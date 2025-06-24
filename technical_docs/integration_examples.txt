@@ -1,0 +1,75 @@
+
+INTEGRATION EXAMPLES
+
+CRM Integration
+
+Salesforce Integration
+Integrate voice AI with Salesforce to automatically log customer interactions and update records.
+
+Configuration Steps:
+1. Create connected app in Salesforce with OAuth 2.0
+2. Configure webhook endpoints in voice AI dashboard
+3. Map conversation data to Salesforce fields
+4. Set up real-time sync for contact updates
+
+Code Example (Python):
+```python
+import requests
+
+def update_salesforce_contact(contact_id, conversation_summary):
+    headers = {
+        'Authorization': f'Bearer {sf_access_token}',
+        'Content-Type': 'application/json'
+    }
+    
+    data = {
+        'Last_Conversation__c': conversation_summary,
+        'Last_Contact_Date__c': datetime.now().isoformat()
+    }
+    
+    response = requests.patch(
+        f'{sf_instance_url}/services/data/v52.0/sobjects/Contact/{contact_id}',
+        headers=headers,
+        json=data
+    )
+    
+    return response.status_code == 200
+```
+
+Phone System Integration
+
+Asterisk PBX Integration
+Connect voice AI to Asterisk PBX for automated call handling.
+
+Configuration Requirements:
+- Asterisk version 16.0 or higher
+- SIP trunk configuration with authentication
+- Dialplan modifications for AI routing
+- AGI script for voice AI communication
+
+Sample Dialplan:
+```
+[incoming-ai]
+exten => _X.,1,Answer()
+same => n,Set(CHANNEL(language)=en)
+same => n,AGI(voiceai-connector.py,${CALLERID(num)})
+same => n,Hangup()
+```
+
+The AGI script handles the communication between Asterisk and the voice AI service, managing audio streaming and response routing.
+
+Microsoft Teams Integration
+Enable voice AI within Microsoft Teams for internal support and assistance.
+
+Setup Process:
+1. Register application in Azure AD
+2. Configure bot framework endpoints
+3. Deploy Teams app package
+4. Configure permissions for voice access
+
+Custom Integration
+For custom applications, use our WebSocket API for real-time voice streaming.
+
+WebSocket Endpoint: wss://api.voiceai.company.com/v1/stream
+
+Connection requires authentication token and supports bidirectional audio streaming with real-time transcription and response generation.
