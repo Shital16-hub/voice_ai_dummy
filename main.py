@@ -1,14 +1,7 @@
-# main_fixed_rag.py - FIXED RAG Implementation
+# main.py - FIXED VERSION FOR YOUR PROJECT
 """
-FIXED: LiveKit Voice Agent with Working RAG System
-Based on official LiveKit examples and best practices
-
-Key Fixes:
-1. Simplified RAG implementation using on_user_turn_completed
-2. Reliable TTS fallback system
-3. Proper context injection patterns
-4. Excel data integration
-5. Timeout handling
+FIXED: LiveKit Voice Agent with WORKING RAG System  
+SOLUTION: Simplified RAG + longer timeout + better error handling
 """
 import asyncio
 import logging
@@ -39,8 +32,8 @@ try:
 except ImportError:
     TURN_DETECTOR_AVAILABLE = False
 
-# Import your existing components but with fixes
-from qdrant_rag_system import qdrant_rag
+# FIXED: Use the simple RAG system instead of complex ultra-fast one
+from simple_rag_system import simple_rag  # This is more reliable
 from config import config
 from call_transcription_storage import call_storage
 
@@ -49,7 +42,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CallData:
-    """Simplified call data structure"""
+    """Call data structure"""
     session_id: Optional[str] = None
     caller_id: Optional[str] = None
     phone_number: Optional[str] = None
@@ -68,16 +61,15 @@ class CallData:
         "vehicle": False, "service": False
     })
 
-class WorkingRAGAgent(Agent):
+class FixedRAGAgent(Agent):
     """
-    FIXED: RAG-powered agent using LiveKit best practices
+    FIXED: Agent with working RAG system using simple_rag_system.py
     """
     
     def __init__(self, call_data: CallData):
         self.call_data = call_data
-        self.rag_cache = {}  # Simple cache for performance
+        self.rag_cache = {}
         self.last_rag_lookup = 0
-        self.rag_enabled = False  # Will be set during initialization
         
         instructions = self._build_instructions()
         super().__init__(instructions=instructions)
@@ -86,33 +78,35 @@ class WorkingRAGAgent(Agent):
         """Build context-aware instructions"""
         base_instructions = """You are Mark, a professional roadside assistance dispatcher.
 
-GOAL: Help customers with roadside assistance needs using our knowledge base.
+IMPORTANT: You provide roadside assistance services directly. You ARE the service provider.
+
+SERVICES YOU PROVIDE:
+- Towing services
+- Battery jump start and replacement
+- Tire change and repair  
+- Emergency roadside assistance
+- All pricing and service information is in your knowledge base
 
 CONVERSATION FLOW:
 1. Collect customer information step by step
-2. Use knowledge base to provide accurate pricing and service info
-3. Route to specialists when all info is collected
+2. Use search_knowledge_base() to get EXACT pricing from your Excel database
+3. Provide specific quotes and arrange service directly
+4. Route to specialists when needed
 
 KNOWLEDGE BASE USAGE:
-- When customers ask about pricing, services, or policies, I will search our Excel knowledge base
-- If knowledge base has relevant info, I will provide specific, accurate information from our database
-- If knowledge base has no relevant info, I will say "I don't have that specific information in my current database. Let me connect you with someone who can provide exact details."
-- NEVER make up prices or information that's not in the knowledge base
-- NEVER use placeholder prices like "$xx" - only use real data from Excel or acknowledge lack of data
+- Always use search_knowledge_base() for pricing questions
+- Provide EXACT prices from your Excel data
+- Never say "find a service provider" - YOU are the service provider
+- Never use generic pricing - always search your database
 
 INFORMATION GATHERING:
 1. Full name
-2. Phone number
+2. Phone number  
 3. Vehicle location (complete address)
 4. Vehicle details (year, make, model)
 5. Service needed
 
 Use gather_caller_information() to store each piece.
-
-ROUTING (after all info collected):
-- Towing → route_to_towing_specialist()
-- Battery → route_to_battery_specialist()
-- Tire → route_to_tire_specialist()
 
 Keep responses under 25 words for phone clarity."""
 
@@ -121,41 +115,39 @@ Keep responses under 25 words for phone clarity."""
 
 RETURNING CALLER:
 - Previous calls: {self.call_data.previous_calls_count}
-- Welcome them back warmly"""
+- Welcome them back warmly: "Welcome back! I see you've called us before."
+"""
         
         return base_instructions
     
     async def on_user_turn_completed(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
         """
-        FIXED: Proper RAG implementation using LiveKit best practices
-        This is the recommended approach from LiveKit documentation
+        FIXED: Proper RAG implementation using simple_rag_system
         """
         try:
             user_text = new_message.text_content
             if not user_text or len(user_text.strip()) < 3:
                 return
             
-            # Rate limiting to prevent too frequent RAG calls
+            # Rate limiting
             current_time = time.time()
-            if current_time - self.last_rag_lookup < 1.0:  # 1 second cooldown
+            if current_time - self.last_rag_lookup < 1.0:
                 return
             
-            # Check if this is a query that would benefit from RAG
+            # Check if this should trigger RAG
             if self._should_use_rag(user_text):
                 self.last_rag_lookup = current_time
                 
-                # Perform RAG lookup with proper error handling
                 try:
                     rag_context = await self._perform_rag_lookup(user_text)
                     if rag_context:
-                        # FIXED: Proper context injection using LiveKit patterns
                         turn_ctx.add_message(
                             role="system",
-                            content=f"[KNOWLEDGE_BASE_INFO]: {rag_context}\n\nUse this information to provide accurate, specific answers. Never use placeholder prices."
+                            content=f"[EXCEL_KNOWLEDGE]: {rag_context}\n\nUse this EXACT information from your Excel database to answer the customer's question."
                         )
-                        logger.info(f"✅ RAG context injected for: {user_text[:50]}...")
+                        logger.info(f"✅ Excel data injected: {user_text[:50]}...")
                 except Exception as e:
-                    logger.warning(f"⚠️ RAG lookup failed, continuing without: {e}")
+                    logger.warning(f"⚠️ RAG lookup failed: {e}")
                     
         except Exception as e:
             logger.error(f"❌ Error in RAG context injection: {e}")
@@ -163,17 +155,17 @@ RETURNING CALLER:
     def _should_use_rag(self, user_text: str) -> bool:
         """Determine if query should trigger RAG lookup"""
         rag_keywords = [
-            "cost", "price", "how much", "fee", "charge", "rate",
-            "service", "towing", "battery", "tire", "jumpstart",
-            "coverage", "policy", "hours", "available", "time",
-            "help", "assist", "options", "what do you offer"
+            "cost", "price", "how much", "fee", "charge", "rate", "pricing",
+            "service", "towing", "battery", "tire", "jumpstart", "jump start",
+            "coverage", "policy", "hours", "available", "time", "plan",
+            "help", "assist", "options", "what do you offer", "services"
         ]
         user_lower = user_text.lower()
         return any(keyword in user_lower for keyword in rag_keywords)
     
     async def _perform_rag_lookup(self, query: str) -> Optional[str]:
         """
-        FIXED: Reliable RAG lookup with proper error handling
+        FIXED: Use simple_rag_system for reliable knowledge base access
         """
         try:
             # Check cache first
@@ -181,55 +173,51 @@ RETURNING CALLER:
             if cache_key in self.rag_cache:
                 return self.rag_cache[cache_key]
             
-            # Perform RAG search with timeout
+            # FIXED: Use simple_rag instead of complex qdrant_rag
             results = await asyncio.wait_for(
-                qdrant_rag.search(query, limit=2),
-                timeout=1.5  # Reasonable timeout
+                simple_rag.search(query, limit=2),
+                timeout=3.0  # Longer timeout for reliability
             )
             
-            if results and len(results) > 0 and results[0].get("score", 0) >= 0.2:
-                # Format the best result for context injection
+            if results and len(results) > 0:
+                # Format the best result
                 best_result = results[0]
                 context = self._format_rag_result(best_result["text"])
                 
                 # Cache successful result
                 self.rag_cache[cache_key] = context
-                if len(self.rag_cache) > 20:  # Limit cache size
+                if len(self.rag_cache) > 20:
                     oldest_key = next(iter(self.rag_cache))
                     del self.rag_cache[oldest_key]
                 
-                logger.info(f"📚 RAG found relevant info (score: {best_result['score']:.3f})")
+                logger.info(f"📚 Excel data found (score: {best_result.get('score', 0):.3f})")
                 return context
             else:
-                logger.debug("🔍 No relevant RAG results found")
+                logger.debug("🔍 No Excel data found for query")
                 return None
                 
         except asyncio.TimeoutError:
-            logger.warning("⏰ RAG lookup timeout")
+            logger.warning("⏰ Knowledge base lookup timeout")
             return None
         except Exception as e:
-            logger.error(f"❌ RAG lookup error: {e}")
+            logger.error(f"❌ Knowledge base lookup error: {e}")
             return None
     
     def _format_rag_result(self, raw_text: str) -> str:
-        """Format RAG result for context injection"""
+        """Format Excel result for context injection"""
         if not raw_text:
             return ""
         
-        # Clean and format the text
+        # Clean and format
         cleaned = raw_text.strip()
-        
-        # Remove formatting characters
         for char in ["•", "-", "*", "\n", "\t"]:
             cleaned = cleaned.replace(char, " ")
         
-        # Remove multiple spaces
         while "  " in cleaned:
             cleaned = cleaned.replace("  ", " ")
         
-        # Keep it concise for voice context
+        # Keep concise for voice
         if len(cleaned) > 200:
-            # Try to break at sentence boundary
             sentences = cleaned.split(".")
             result = sentences[0].strip()
             if len(result) < 50 and len(sentences) > 1:
@@ -253,7 +241,7 @@ RETURNING CALLER:
         issue: str = None,
         service_needed: str = None
     ) -> str:
-        """Store caller information - same reliable pattern"""
+        """Store caller information"""
         
         updates = []
         
@@ -297,7 +285,7 @@ RETURNING CALLER:
         
         gathered = context.userdata.gathered_info
         if all([gathered["name"], gathered["phone"], gathered["location"], gathered["vehicle"], gathered["service"]]):
-            return "Perfect! I have all the information I need. Let me connect you to our specialist now."
+            return "Perfect! I have all the information I need. Let me get you an exact quote from our pricing database."
         else:
             missing = [key for key, value in gathered.items() if not value]
             next_questions = {
@@ -318,24 +306,24 @@ RETURNING CALLER:
         query: str
     ) -> str:
         """
-        FIXED: Direct knowledge base search tool
-        This gives the LLM explicit control over when to search
+        FIXED: Search Excel knowledge base - NEVER return fallbacks
         """
         try:
-            logger.info(f"🔍 Direct knowledge search: {query}")
+            logger.info(f"🔍 Searching Excel database: {query}")
             
+            # FIXED: Use simple_rag_system which is more reliable
             results = await asyncio.wait_for(
-                qdrant_rag.search(query, limit=3),
-                timeout=2.0
+                simple_rag.search(query, limit=3),
+                timeout=5.0  # Longer timeout
             )
             
             if not results:
-                logger.debug("🔍 No knowledge base results found")
-                return "I don't have that specific information in my current knowledge base. Let me connect you with someone who can provide exact details."
+                logger.warning("⚠️ No data found in Excel knowledge base")
+                return "I don't have that specific information in my current pricing database. Let me connect you with my supervisor who has access to our complete pricing system."
             
-            # Format multiple results for comprehensive answer
+            # Format results from Excel data
             response_parts = []
-            for result in results[:2]:  # Use top 2 results
+            for result in results[:2]:
                 if result.get("score", 0) >= 0.2:
                     formatted = self._format_rag_result(result["text"])
                     if formatted and formatted not in response_parts:
@@ -343,14 +331,14 @@ RETURNING CALLER:
             
             if response_parts:
                 response = " | ".join(response_parts)
-                logger.info(f"📊 Knowledge base search successful")
+                logger.info(f"📊 Excel database search successful - returned {len(response_parts)} results")
                 return response
             else:
-                return "I found some information but it may not be specific enough for your question. Let me transfer you to a specialist who can provide exact details from our current database."
+                return "I found some information in our database but need to verify the current rates. Let me transfer you to someone who can provide the most up-to-date pricing."
                 
         except Exception as e:
-            logger.error(f"❌ Knowledge base search error: {e}")
-            return "I'm having trouble accessing our knowledge base right now. Let me connect you with someone who can help with current information."
+            logger.error(f"❌ Excel database search error: {e}")
+            return "I'm having trouble accessing our pricing database right now. Let me connect you with someone who can help with current pricing information."
 
     @function_tool()
     async def route_to_towing_specialist(self, context: RunContext[CallData]) -> Agent:
@@ -371,7 +359,7 @@ RETURNING CALLER:
         return TireSpecialistAgent(context.userdata)
 
 class TowingSpecialistAgent(Agent):
-    """Specialist agent with built-in RAG capabilities"""
+    """Towing specialist with Excel knowledge access"""
     
     def __init__(self, customer_data: CallData):
         self.customer_data = customer_data
@@ -386,11 +374,11 @@ CUSTOMER INFO:
 
 YOUR JOB:
 - Ask where they want the vehicle towed
-- Use search_knowledge_base() for current pricing and policies
-- Provide accurate quotes and ETAs
+- Use search_knowledge_base() for EXACT pricing from Excel data
+- Provide accurate quotes and ETAs from your database
 - Arrange the service
 
-Always search the knowledge base for pricing questions."""
+CRITICAL: Always search knowledge base for pricing. Never use generic prices."""
         
         super().__init__(instructions=instructions)
 
@@ -406,25 +394,24 @@ Always search the knowledge base for pricing questions."""
 
     @function_tool()
     async def search_knowledge_base(self, context: RunContext[CallData], query: str) -> str:
-        """Search knowledge base for towing info"""
+        """Search Excel database for towing info"""
         try:
             enhanced_query = f"towing service rates pricing {query}"
-            results = await asyncio.wait_for(qdrant_rag.search(enhanced_query, limit=2), timeout=1.5)
+            results = await asyncio.wait_for(simple_rag.search(enhanced_query, limit=2), timeout=3.0)
             
             if results and results[0].get("score", 0) >= 0.2:
                 return results[0]["text"][:200]
             
-            # Fallback response
-            return "For local towing, our base rate is $75 hookup plus mileage. Let me get you an exact quote based on your destination."
+            return "Let me look up the exact towing rates in our system and get back to you with accurate pricing."
         except Exception:
-            return "Let me check our current rates and get back to you with accurate pricing."
+            return "I need to verify our current towing rates. Let me get the exact pricing for you."
 
 class BatterySpecialistAgent(Agent):
-    """Battery specialist with RAG"""
+    """Battery specialist with Excel access"""
     
     def __init__(self, customer_data: CallData):
         self.customer_data = customer_data
-        super().__init__(instructions="You are a BATTERY SPECIALIST. Use search_knowledge_base() for pricing and service info.")
+        super().__init__(instructions="You are a BATTERY SPECIALIST. Use search_knowledge_base() for EXACT pricing from Excel data.")
 
     async def on_enter(self):
         name = self.customer_data.caller_name or "there"
@@ -434,20 +421,20 @@ class BatterySpecialistAgent(Agent):
 
     @function_tool()
     async def search_knowledge_base(self, context: RunContext[CallData], query: str) -> str:
-        """Search for battery service info"""
+        """Search Excel for battery service info"""
         try:
             enhanced_query = f"battery jumpstart service pricing {query}"
-            results = await asyncio.wait_for(qdrant_rag.search(enhanced_query, limit=1), timeout=1.5)
-            return results[0]["text"][:200] if results else "Jump start service typically $25-35. Battery replacement available if needed."
+            results = await asyncio.wait_for(simple_rag.search(enhanced_query, limit=1), timeout=3.0)
+            return results[0]["text"][:200] if results else "Let me check our current battery service rates."
         except:
-            return "Our battery services include jump starts and replacement. Let me get current pricing."
+            return "Let me verify our battery service pricing in our system."
 
 class TireSpecialistAgent(Agent):
-    """Tire specialist with RAG"""
+    """Tire specialist with Excel access"""
     
     def __init__(self, customer_data: CallData):
         self.customer_data = customer_data
-        super().__init__(instructions="You are a TIRE SPECIALIST. Use search_knowledge_base() for pricing and service info.")
+        super().__init__(instructions="You are a TIRE SPECIALIST. Use search_knowledge_base() for EXACT pricing from Excel data.")
 
     async def on_enter(self):
         name = self.customer_data.caller_name or "there"
@@ -457,13 +444,13 @@ class TireSpecialistAgent(Agent):
 
     @function_tool()
     async def search_knowledge_base(self, context: RunContext[CallData], query: str) -> str:
-        """Search for tire service info"""
+        """Search Excel for tire service info"""
         try:
             enhanced_query = f"tire service repair pricing {query}"
-            results = await asyncio.wait_for(qdrant_rag.search(enhanced_query, limit=1), timeout=1.5)
-            return results[0]["text"][:200] if results else "Tire change service typically $35-45. Spare tire installation included."
+            results = await asyncio.wait_for(simple_rag.search(enhanced_query, limit=1), timeout=3.0)
+            return results[0]["text"][:200] if results else "Let me check our tire service rates."
         except:
-            return "Our tire services include changes and repairs. Let me get current pricing."
+            return "Let me look up our current tire service pricing."
 
 async def identify_caller_with_history(ctx: JobContext) -> CallData:
     """Identify caller and load history"""
@@ -474,7 +461,7 @@ async def identify_caller_with_history(ctx: JobContext) -> CallData:
             logger.warning("⚠️ No SIP participant found")
             return CallData()
         
-        # Extract phone number with multiple fallbacks
+        # Extract phone number
         phone_number = "unknown"
         phone_attrs = ["sip.phoneNumber", "sip.from_number", "sip.caller_number"]
         
@@ -524,42 +511,54 @@ def prewarm(proc: JobProcess):
 
 async def entrypoint(ctx: JobContext):
     """
-    FIXED: Main entrypoint with reliable RAG initialization
+    FIXED: Main entrypoint with working RAG initialization
     """
     
     logger.info("🚀 FIXED RAG-Enabled Voice Agent Starting")
-    logger.info("📚 Using improved RAG with proper context injection")
+    logger.info("📚 Using RELIABLE RAG with Excel knowledge base")
     
     await ctx.connect()
     logger.info("✅ Connected to room")
     
-    # FIXED: Initialize RAG with proper timeout and fallback
+    # FIXED: Initialize RAG with longer timeout and simple system
     try:
         rag_start = time.time()
-        success = await asyncio.wait_for(qdrant_rag.initialize(), timeout=5.0)
+        logger.info("🔧 Initializing Excel knowledge base...")
+        
+        # FIXED: Use simple_rag_system and longer timeout
+        success = await asyncio.wait_for(simple_rag.initialize(), timeout=15.0)
         rag_time = (time.time() - rag_start) * 1000
         
         if success:
-            logger.info(f"✅ RAG system ready in {rag_time:.1f}ms")
+            status = await simple_rag.get_status()
+            points_count = status.get("points_count", 0)
+            logger.info(f"✅ Excel knowledge base ready in {rag_time:.1f}ms")
+            logger.info(f"📊 Knowledge base has {points_count} documents from Excel")
+            
+            if points_count == 0:
+                logger.warning("⚠️ Knowledge base is empty!")
+                logger.info("💡 Run: python quick_ingest.py --file data/Roadside_Assist_Info.xlsx")
         else:
-            logger.warning("⚠️ RAG initialization failed - continuing with limited knowledge")
+            logger.error("❌ Excel knowledge base failed to initialize")
+            logger.info("💡 Check if Qdrant is running: docker-compose up -d")
     except asyncio.TimeoutError:
-        logger.warning("⚠️ RAG initialization timeout - continuing without RAG")
+        logger.error("❌ Excel knowledge base initialization timeout")
+        logger.info("💡 Check Qdrant connection and try: docker-compose restart")
     except Exception as e:
-        logger.error(f"❌ RAG initialization error: {e} - continuing without RAG")
+        logger.error(f"❌ Excel knowledge base error: {e}")
     
     # Identify caller
     call_data = await identify_caller_with_history(ctx)
     
-    # FIXED: Create reliable session with fallback TTS
+    # Create session with fallback TTS
     session_params = {
         "vad": ctx.proc.userdata["vad"],
-        "stt": deepgram.STT(model="nova-3", language="en-US"),
+        "stt": deepgram.STT(model="nova-2-general", language="en-US"),
         "llm": openai.LLM(model="gpt-4o-mini", temperature=0.1),
         "userdata": call_data
     }
     
-    # FIXED: TTS with fallback - try ElevenLabs first, fallback to OpenAI
+    # TTS with fallback
     try:
         session_params["tts"] = elevenlabs.TTS(
             voice_id="21m00Tcm4TlvDq8ikWAM",
@@ -583,8 +582,8 @@ async def entrypoint(ctx: JobContext):
     
     session = AgentSession[CallData](**session_params)
     
-    # Create RAG-enabled agent
-    initial_agent = WorkingRAGAgent(call_data)
+    # Create FIXED agent with working RAG
+    initial_agent = FixedRAGAgent(call_data)
     
     # Start session
     await session.start(
@@ -605,13 +604,13 @@ async def entrypoint(ctx: JobContext):
     logger.info(f"👤 Caller ID: {call_data.caller_id}")
     logger.info(f"📱 Phone: {call_data.phone_number}")
     logger.info(f"🔄 Returning: {call_data.is_returning_caller}")
-    logger.info("🎯 RAG system ready with Excel knowledge base integration")
+    logger.info("🎯 Excel knowledge base integration active")
 
 if __name__ == "__main__":
     try:
         logger.info("🎙️ Starting FIXED RAG-Enabled Voice Agent")
-        logger.info("📚 Excel knowledge base integration active")
-        logger.info("🔧 Reliable RAG with proper context injection")
+        logger.info("📊 Excel knowledge base integration with reliable RAG")
+        logger.info("🔧 Fixed timeout and error handling")
         
         worker_options = WorkerOptions(
             entrypoint_fnc=entrypoint,
