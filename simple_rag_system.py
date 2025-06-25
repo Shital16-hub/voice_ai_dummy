@@ -1,13 +1,7 @@
-# simple_rag_system.py - SIMPLIFIED & RELIABLE RAG
+# fixed_simple_rag_system.py - PURE EXCEL RAG
 """
-Simplified RAG System for LiveKit Voice Agents
-Based on LiveKit official examples and best practices
-
-Key Features:
-1. Fast initialization (< 2 seconds)
-2. Reliable Excel data retrieval
-3. Proper error handling
-4. Context injection that works
+FIXED: Simple RAG System that ONLY uses Excel data
+NO hardcoded responses, NO fallbacks
 """
 import asyncio
 import logging
@@ -25,9 +19,10 @@ from config import config
 
 logger = logging.getLogger(__name__)
 
-class SimpleRAGSystem:
+class FixedSimpleRAGSystem:
     """
-    Simplified RAG system optimized for reliability over speed
+    FIXED: Simple RAG system that ONLY returns Excel data
+    NO hardcoded responses, NO fallbacks
     """
     
     def __init__(self):
@@ -39,12 +34,11 @@ class SimpleRAGSystem:
         self.cache = {}
         self.max_cache_size = 50
         
-        # Pre-loaded responses for common queries - REMOVED
-        # All responses must come from Excel knowledge base only
-        self.quick_responses = {}
+        # REMOVED: All quick_responses and fallbacks
+        # System must use Excel data ONLY
         
     async def initialize(self) -> bool:
-        """Simple, reliable initialization"""
+        """Initialize with strict Excel-only mode"""
         try:
             start_time = time.time()
             
@@ -57,29 +51,30 @@ class SimpleRAGSystem:
             # Step 2: Initialize clients
             self.client = QdrantClient(
                 url=config.qdrant_url,
-                timeout=5
+                timeout=10  # Increased timeout
             )
             
             self.openai_client = openai.AsyncOpenAI(
                 api_key=config.openai_api_key,
-                timeout=5.0
+                timeout=10.0  # Increased timeout
             )
             
             # Step 3: Ensure collection exists
             await self._ensure_collection_exists()
             
-            # Step 4: Test search capability
-            test_success = await self._test_search()
+            # Step 4: Verify Excel data exists
+            data_exists = await self._verify_excel_data()
             
-            self.ready = test_success
+            if not data_exists:
+                logger.error("❌ CRITICAL: No Excel data found in knowledge base!")
+                logger.error("💡 Run: python quick_ingest.py --file data/your_excel_file.xlsx")
+                return False
+            
+            self.ready = True
             elapsed = (time.time() - start_time) * 1000
             
-            if self.ready:
-                logger.info(f"✅ Simple RAG system ready in {elapsed:.1f}ms")
-                return True
-            else:
-                logger.warning(f"⚠️ RAG system partially ready in {elapsed:.1f}ms")
-                return False
+            logger.info(f"✅ PURE Excel RAG system ready in {elapsed:.1f}ms")
+            return True
                 
         except Exception as e:
             logger.error(f"❌ RAG initialization failed: {e}")
@@ -89,7 +84,7 @@ class SimpleRAGSystem:
         """Quick health check"""
         try:
             import requests
-            response = requests.get(f"{config.qdrant_url}/", timeout=2)
+            response = requests.get(f"{config.qdrant_url}/", timeout=3)
             return response.status_code == 200
         except:
             return False
@@ -118,78 +113,76 @@ class SimpleRAGSystem:
             logger.error(f"❌ Collection setup failed: {e}")
             raise
     
-    async def _test_search(self) -> bool:
-        """Test search functionality - but allow empty collections"""
+    async def _verify_excel_data(self) -> bool:
+        """Verify Excel data exists in collection"""
         try:
-            # Get collection info
             info = await asyncio.to_thread(
                 self.client.get_collection,
                 config.qdrant_collection_name
             )
             
             points_count = info.points_count
-            logger.info(f"📊 Collection has {points_count} documents")
+            logger.info(f"📊 Collection has {points_count} Excel documents")
             
             if points_count > 0:
-                # Test a simple search if we have data
-                test_results = await self.search("test query", limit=1)
-                logger.info(f"🔍 Search test: {'✅ Working' if test_results else '⚠️ No results'}")
+                # Test search to verify data is accessible
+                test_results = await self.search("price", limit=1)
+                if test_results:
+                    logger.info("✅ Excel data is accessible and searchable")
+                    return True
+                else:
+                    logger.warning("⚠️ Excel data exists but not searchable")
+                    return False
             else:
-                logger.info("📝 Collection is empty but ready to accept documents")
-            
-            # System is ready even with empty collection
-            return True
+                logger.error("❌ No Excel data found in collection")
+                return False
                 
         except Exception as e:
-            logger.error(f"❌ Search test failed: {e}")
+            logger.error(f"❌ Excel data verification failed: {e}")
             return False
     
     async def search(self, query: str, limit: int = 2) -> List[Dict[str, Any]]:
         """
-        Simple, reliable search with fallbacks
+        PURE Excel search - NO fallbacks
         """
         if not self.ready:
-            logger.warning("⚠️ RAG system not ready - no knowledge base data available")
+            logger.warning("⚠️ RAG system not ready - no Excel data available")
             return []
         
         try:
             # Check cache first
             cache_key = hashlib.md5(query.lower().strip().encode()).hexdigest()[:16]
             if cache_key in self.cache:
-                logger.debug("📚 Using cached result")
+                logger.debug("📚 Using cached Excel result")
                 return self.cache[cache_key]
             
-            # Check quick responses - DISABLED to force knowledge base usage
-            # All responses must come from Excel data only
-            # No hardcoded responses allowed
-            
-            # Perform vector search
-            start_time = time.time()
-            
             # Create embedding
+            start_time = time.time()
             embedding = await self._create_embedding(query)
             if not embedding:
-                logger.warning("⚠️ Failed to create embedding - no knowledge base search possible")
+                logger.warning("⚠️ Failed to create embedding - no Excel search possible")
                 return []
             
-            # Search
+            # Search Excel data
             search_result = await asyncio.wait_for(
                 asyncio.to_thread(
                     self.client.search,
                     collection_name=config.qdrant_collection_name,
                     query_vector=embedding,
                     limit=limit,
-                    score_threshold=0.2
+                    score_threshold=0.15  # Lower threshold for more results
                 ),
-                timeout=2.0
+                timeout=5.0  # Increased timeout
             )
             
             # Format results
             results = []
             for point in search_result:
                 text = point.payload.get("text", "")
-                if len(text) > 150:  # Keep concise for voice
-                    text = text[:147] + "..."
+                
+                # Keep full text for accurate pricing info
+                if len(text) > 300:  # Only truncate if very long
+                    text = text[:297] + "..."
                 
                 results.append({
                     "id": str(point.id),
@@ -206,19 +199,19 @@ class SimpleRAGSystem:
             self.cache[cache_key] = results
             
             elapsed = (time.time() - start_time) * 1000
-            logger.info(f"🔍 Search completed in {elapsed:.1f}ms, found {len(results)} results")
+            logger.info(f"🔍 Excel search completed in {elapsed:.1f}ms, found {len(results)} results")
             
             return results
             
         except asyncio.TimeoutError:
-            logger.warning("⏰ Search timeout - NO fallback, knowledge base only")
+            logger.warning("⏰ Excel search timeout - NO fallback")
             return []
         except Exception as e:
-            logger.error(f"❌ Search error: {e} - NO fallback, knowledge base only")
+            logger.error(f"❌ Excel search error: {e} - NO fallback")
             return []
     
     async def _create_embedding(self, text: str) -> Optional[List[float]]:
-        """Create embedding with error handling"""
+        """Create embedding with better error handling"""
         try:
             # Clean and prepare text
             clean_text = text.strip()
@@ -226,18 +219,18 @@ class SimpleRAGSystem:
                 logger.warning("⚠️ Empty text provided for embedding")
                 return None
                 
-            logger.debug(f"Creating embedding for text: {clean_text[:100]}...")
+            logger.debug(f"Creating embedding for: {clean_text[:100]}...")
             
             response = await asyncio.wait_for(
                 self.openai_client.embeddings.create(
                     model="text-embedding-3-small",
                     input=clean_text[:1000]  # Truncate for speed
                 ),
-                timeout=10.0  # Increased timeout for embedding creation
+                timeout=15.0  # Increased timeout
             )
             
             embedding = response.data[0].embedding
-            logger.debug(f"✅ Successfully created embedding of size {len(embedding)}")
+            logger.debug(f"✅ Created embedding of size {len(embedding)}")
             return embedding
             
         except asyncio.TimeoutError:
@@ -247,24 +240,16 @@ class SimpleRAGSystem:
             logger.error(f"❌ Embedding creation failed: {e}")
             return None
     
-    def _get_fallback_response(self, query: str) -> List[Dict[str, Any]]:
-        """Return empty result when search fails - NO hardcoded responses"""
-        logger.warning(f"⚠️ No knowledge base results for: {query}")
-        logger.info("💡 This query will be handled without knowledge base context")
-        
-        # Return empty list - let the LLM handle it without knowledge base data
-        return []
-    
     async def add_documents(self, documents: List[Dict[str, Any]]) -> bool:
-        """Add documents to the collection"""
+        """Add Excel documents to the collection"""
         try:
-            logger.info(f"📝 Starting to add {len(documents)} documents...")
+            logger.info(f"📝 Adding {len(documents)} Excel documents...")
             points = []
             
             for i, doc in enumerate(documents):
                 try:
                     # Create embedding
-                    logger.debug(f"Creating embedding for document {i+1}/{len(documents)}")
+                    logger.debug(f"Processing Excel document {i+1}/{len(documents)}")
                     embedding = await self._create_embedding(doc["text"])
                     if not embedding:
                         logger.warning(f"⚠️ Failed to create embedding for document {i+1}")
@@ -282,14 +267,14 @@ class SimpleRAGSystem:
                     
                     # Log progress every 5 documents
                     if (i + 1) % 5 == 0:
-                        logger.info(f"   📝 Processed {i+1}/{len(documents)} documents")
+                        logger.info(f"   📝 Processed {i+1}/{len(documents)} Excel documents")
                         
                 except Exception as e:
-                    logger.error(f"❌ Error processing document {i+1}: {e}")
+                    logger.error(f"❌ Error processing Excel document {i+1}: {e}")
                     continue
             
             if points:
-                logger.info(f"📤 Uploading {len(points)} documents to Qdrant...")
+                logger.info(f"📤 Uploading {len(points)} Excel documents to Qdrant...")
                 
                 # Upload in batches for reliability
                 batch_size = 10
@@ -303,21 +288,21 @@ class SimpleRAGSystem:
                         points=batch
                     )
                 
-                logger.info(f"✅ Successfully added {len(points)} documents")
+                logger.info(f"✅ Successfully added {len(points)} Excel documents")
                 
                 # Verify upload
                 await asyncio.sleep(1)  # Give Qdrant time to index
                 status = await self.get_status()
                 actual_count = status.get("points_count", 0)
-                logger.info(f"🔍 Verification: Collection now has {actual_count} total documents")
+                logger.info(f"🔍 Verification: Collection now has {actual_count} total Excel documents")
                 
                 return True
             else:
-                logger.warning("⚠️ No valid documents to add (all failed embedding creation)")
+                logger.warning("⚠️ No valid Excel documents to add")
                 return False
                 
         except Exception as e:
-            logger.error(f"❌ Failed to add documents: {e}")
+            logger.error(f"❌ Failed to add Excel documents: {e}")
             return False
     
     async def get_status(self) -> Dict[str, Any]:
@@ -335,7 +320,7 @@ class SimpleRAGSystem:
                 "status": "ready",
                 "points_count": info.points_count,
                 "cache_size": len(self.cache),
-                "quick_responses": len(self.quick_responses)
+                "excel_only": True  # Indicates pure Excel mode
             }
         except Exception as e:
             return {"status": "error", "error": str(e)}
@@ -345,12 +330,9 @@ class SimpleRAGSystem:
         try:
             if self.client:
                 self.client.close()
-            logger.info("✅ Simple RAG system closed")
+            logger.info("✅ PURE Excel RAG system closed")
         except Exception as e:
             logger.error(f"❌ Error closing RAG system: {e}")
 
-# Global instance - replace your existing qdrant_rag
-simple_rag = SimpleRAGSystem()
-
-# For backward compatibility
-qdrant_rag = simple_rag
+# Global instance - PURE Excel mode
+simple_rag = FixedSimpleRAGSystem()
