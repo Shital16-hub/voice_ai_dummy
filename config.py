@@ -1,7 +1,6 @@
-# config.py - OPTIMIZED FOR LOW LATENCY
+# config.py - FINAL FIXED VERSION
 """
-Ultra-Optimized Configuration for LiveKit RAG Agent with <2s response time
-UPDATED: Aggressive performance settings for telephony
+FINAL FIXED Configuration - addresses all issues from logs
 """
 import os
 from pathlib import Path
@@ -12,8 +11,8 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-class OptimizedConfig(BaseSettings):
-    """Configuration optimized for ultra-low latency telephony"""
+class FixedConfig(BaseSettings):
+    """FINAL FIXED Configuration based on log analysis"""
     
     # ✅ REQUIRED: LiveKit Settings
     livekit_url: str = Field(default="", env="LIVEKIT_URL")
@@ -34,41 +33,42 @@ class OptimizedConfig(BaseSettings):
         env="TRANSFER_SIP_ADDRESS"
     )
     
-    # 🚀 ULTRA-LOW LATENCY QDRANT SETTINGS
+    # 🚀 FIXED QDRANT SETTINGS
     qdrant_url: str = Field(default="http://localhost:6333", env="QDRANT_URL")
     qdrant_api_key: Optional[str] = Field(default=None, env="QDRANT_API_KEY")
     qdrant_collection_name: str = Field(default="telephony_knowledge", env="QDRANT_COLLECTION")
-    qdrant_timeout: int = Field(default=2, env="QDRANT_TIMEOUT")  # Very short
+    qdrant_timeout: int = Field(default=10, env="QDRANT_TIMEOUT")  # Increased for reliability
     
-    # 🚀 AGGRESSIVE PERFORMANCE SETTINGS
-    embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")  # Fastest
+    # 🚀 FIXED PERFORMANCE SETTINGS
+    embedding_model: str = Field(default="text-embedding-3-small", env="EMBEDDING_MODEL")
     embedding_dimensions: int = Field(default=1536, env="EMBEDDING_DIMENSIONS") 
     
-    # 🚀 ULTRA-FAST RAG SETTINGS
-    rag_timeout_ms: int = Field(default=300, env="RAG_TIMEOUT_MS")  # 300ms!
-    search_limit: int = Field(default=1, env="SEARCH_LIMIT")  # Single result
-    similarity_threshold: float = Field(default=0.2, env="SIMILARITY_THRESHOLD")  # Lower for speed
+    # 🚀 FIXED RAG SETTINGS (Based on your test showing excellent results at 0.2-0.8 range)
+    rag_timeout_ms: int = Field(default=3000, env="RAG_TIMEOUT_MS")  # Increased significantly
+    search_limit: int = Field(default=5, env="SEARCH_LIMIT")  # Increased for better coverage
+    similarity_threshold: float = Field(default=0.15, env="SIMILARITY_THRESHOLD")  # Lowered more
     
-    # 🚀 CHUNK SETTINGS OPTIMIZED FOR TELEPHONY
-    chunk_size: int = Field(default=200, env="CHUNK_SIZE")  # Smaller chunks
-    chunk_overlap: int = Field(default=20, env="CHUNK_OVERLAP")  # Less overlap
-    max_tokens: int = Field(default=30, env="MAX_TOKENS")  # Very short responses
+    # 🚀 MULTI-LEVEL THRESHOLDS (From your test data analysis)
+    high_confidence_threshold: float = Field(default=0.5, env="HIGH_CONFIDENCE_THRESHOLD")  
+    medium_confidence_threshold: float = Field(default=0.3, env="MEDIUM_CONFIDENCE_THRESHOLD")  
+    minimum_usable_threshold: float = Field(default=0.15, env="MINIMUM_USABLE_THRESHOLD")  
     
-    # 🚀 EMBEDDING CACHE FOR MASSIVE SPEED IMPROVEMENT
+    # 🚀 ENHANCED SETTINGS
+    chunk_size: int = Field(default=400, env="CHUNK_SIZE")  # Larger for better context
+    chunk_overlap: int = Field(default=50, env="CHUNK_OVERLAP")
+    max_tokens: int = Field(default=80, env="MAX_TOKENS")  # Increased for complete information
+    
+    # 🚀 CACHE SETTINGS
     enable_embedding_cache: bool = Field(default=True, env="ENABLE_EMBEDDING_CACHE")
-    embedding_cache_size: int = Field(default=200, env="EMBEDDING_CACHE_SIZE")  # Smaller cache
+    embedding_cache_size: int = Field(default=1000, env="EMBEDDING_CACHE_SIZE")  # Much larger
     
-    # 🚀 QDRANT SEARCH OPTIMIZATION
-    qdrant_exact_search: bool = Field(default=False, env="QDRANT_EXACT_SEARCH")  # Approximate for speed
-    qdrant_hnsw_ef: int = Field(default=16, env="QDRANT_HNSW_EF")  # Very low for speed
-    
-    # 🚀 TELEPHONY-SPECIFIC ULTRA-FAST SETTINGS
-    max_response_length: int = Field(default=80, env="MAX_RESPONSE_LENGTH")  # Very short
+    # 🚀 VOICE SETTINGS
+    max_response_length: int = Field(default=200, env="MAX_RESPONSE_LENGTH")  # Increased
     enable_response_streaming: bool = Field(default=True, env="ENABLE_RESPONSE_STREAMING")
     
-    # 🚀 DOCKER OPTIMIZATION
-    use_local_docker: bool = Field(default=True, env="USE_LOCAL_DOCKER")
-    docker_health_check_retries: int = Field(default=2, env="DOCKER_HEALTH_CHECK_RETRIES")  # Fewer retries
+    # 🚀 TRANSFER SETTINGS
+    auto_transfer_disabled: bool = Field(default=True, env="AUTO_TRANSFER_DISABLED")
+    require_transfer_confirmation: bool = Field(default=True, env="REQUIRE_TRANSFER_CONFIRMATION")
     
     # ✅ PATHS
     @property
@@ -92,7 +92,7 @@ class OptimizedConfig(BaseSettings):
         """Check if Qdrant Docker container is healthy"""
         try:
             import requests
-            response = requests.get(f"{self.qdrant_url}/", timeout=1)  # Very short timeout
+            response = requests.get(f"{self.qdrant_url}/", timeout=3)
             return response.status_code == 200
         except:
             return False
@@ -103,7 +103,7 @@ class OptimizedConfig(BaseSettings):
         extra = "ignore"
 
 # Global configuration instance
-config = OptimizedConfig()
+config = FixedConfig()
 config.ensure_directories()
 
 def validate_config():
@@ -118,23 +118,23 @@ def validate_config():
     if missing_fields:
         raise ValueError(f"Missing required environment variables: {', '.join(missing_fields)}")
     
-    print("✅ ULTRA-LOW LATENCY Configuration")
+    print("✅ FINAL FIXED Configuration")
     print(f"📞 Transfer destination: {config.transfer_sip_address}")
     print(f"🔍 Qdrant URL: {config.qdrant_url}")
-    print(f"⚡ RAG timeout: {config.rag_timeout_ms}ms (ULTRA-FAST!)")
-    print(f"🔍 Search limit: {config.search_limit} (SINGLE RESULT)")
-    print(f"📊 Similarity threshold: {config.similarity_threshold} (OPTIMIZED)")
-    print(f"🧠 Max response tokens: {config.max_tokens} (VERY SHORT)")
-    print(f"🚀 Embedding cache: {config.enable_embedding_cache}")
-    print(f"🎯 Target: <2 second total response time")
+    print(f"⚡ RAG timeout: {config.rag_timeout_ms}ms (FIXED)")
+    print(f"🔍 Search limit: {config.search_limit} (INCREASED)")
+    print(f"📊 Similarity threshold: {config.similarity_threshold} (LOWERED)")
+    print(f"🎯 High confidence: ≥{config.high_confidence_threshold}")
+    print(f"🎯 Medium confidence: ≥{config.medium_confidence_threshold}")
+    print(f"🎯 Minimum usable: ≥{config.minimum_usable_threshold}")
+    print(f"🧠 Max response: {config.max_response_length} chars")
+    print(f"🚫 Auto transfer: {'DISABLED' if config.auto_transfer_disabled else 'ENABLED'}")
     
     # Check Docker health
-    if config.use_local_docker:
-        if config.is_docker_healthy():
-            print("✅ Qdrant Docker container is healthy")
-        else:
-            print("⚠️  Warning: Qdrant Docker container not responding")
-            print("   Run: docker-compose up -d to start Qdrant")
+    if config.is_docker_healthy():
+        print("✅ Qdrant Docker container is healthy")
+    else:
+        print("⚠️ Warning: Qdrant Docker container not responding")
 
 if __name__ == "__main__":
     validate_config()
