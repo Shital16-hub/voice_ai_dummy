@@ -1,0 +1,32 @@
+# requirements_simplified.txt
+# Simplified requirements for improved RAG system
+
+# Core LiveKit Dependencies
+livekit-agents[openai,silero,deepgram,elevenlabs,cartesia,turn-detector]~=1.1.0
+livekit-api
+livekit-protocol
+
+# LlamaIndex Core (simplified RAG approach)
+llama-index-core>=0.11.0
+llama-index-vector-stores-qdrant>=0.3.0
+llama-index-embeddings-openai>=0.2.0
+llama-index-llms-openai>=0.2.0
+
+# Qdrant Client (both sync and async)
+qdrant-client[async]>=1.14.2
+
+# AI and Embeddings  
+openai>=1.3.0
+
+# Essential Dependencies
+python-dotenv
+pydantic-settings
+asyncio
+aiofiles
+
+# Document Processing
+pandas
+openpyxl
+
+# Performance
+numpy

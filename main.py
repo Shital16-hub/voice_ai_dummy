@@ -1,11 +1,7 @@
-# main.py - FINAL FIXED VERSION
+# main_improved.py - SIMPLIFIED WITH LLAMAINDEX RAG
 """
-FINAL FIXED VERSION - Addresses all issues from logs:
-1. Better STT configuration 
-2. Fixed RAG search patterns
-3. Proper config usage
-4. Enhanced error handling
-Based on LiveKit examples and your specific issues
+Improved main.py using simplified RAG system based on LiveKit examples
+Preserves all your existing features but with much simpler RAG implementation
 """
 import asyncio
 import logging
@@ -25,7 +21,8 @@ from livekit.agents import (
     WorkerOptions,
     cli,
     function_tool,
-    JobProcess
+    JobProcess,
+    llm
 )
 from livekit.plugins import deepgram, openai, elevenlabs, silero
 
@@ -36,8 +33,8 @@ try:
 except ImportError:
     TURN_DETECTOR_AVAILABLE = False
 
-# Import systems
-from simple_rag_system import simple_rag
+# Import systems - using simplified RAG
+from simple_rag_v2 import simplified_rag
 from config import config
 from call_transcription_storage import call_storage
 
@@ -46,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class CallData:
-    """Enhanced call data structure"""
+    """Enhanced call data structure - preserved from your original"""
     session_id: Optional[str] = None
     caller_id: Optional[str] = None
     phone_number: Optional[str] = None
@@ -67,27 +64,26 @@ class CallData:
         "vehicle": False, "service": False
     })
 
-class FinalFixedRAGAgent(Agent):
+class ImprovedRAGAgent(Agent):
     """
-    FINAL FIXED Agent - addresses all issues from logs
+    Improved agent using simplified RAG system
+    Following LiveKit patterns but preserving all your features
     """
     
     def __init__(self, call_data: CallData):
         self.call_data = call_data
-        self.rag_context_cache = {}
         self.conversation_turns = 0
-        self.last_rag_lookup = 0
         
-        instructions = self._build_fixed_instructions()
+        instructions = self._build_instructions()
         super().__init__(instructions=instructions)
     
-    def _build_fixed_instructions(self) -> str:
-        """Build fixed instructions based on your Excel data"""
+    def _build_instructions(self) -> str:
+        """Build instructions - preserved from your original with RAG context"""
         base_instructions = """You are Mark, a professional roadside assistance operator.
 
 CRITICAL: You provide roadside assistance services directly. You ARE the service provider.
 
-YOUR EXCEL KNOWLEDGE BASE CONTAINS:
+YOUR KNOWLEDGE BASE CONTAINS:
 - Towing services: Standard Sedan ($75), SUV/Truck ($120), Motorcycle ($60), Long Distance ($150), etc.
 - Battery services: Jump-Start ($40), Battery Replacement ($150+), Battery Testing ($30)
 - Tire services: Flat Tire Change ($50), Tire Repair ($25), Tire Inflation ($20)
@@ -98,7 +94,7 @@ CONVERSATION RULES:
 - ALWAYS use search_knowledge_base() for pricing and service questions
 - NEVER auto-transfer unless customer explicitly asks for "human agent" or "transfer me"
 - Keep responses under 40 words for phone clarity
-- Be helpful and provide exact pricing from Excel data
+- Be helpful and provide exact pricing from knowledge base
 
 INFORMATION GATHERING ORDER:
 1. Customer's full name
@@ -126,7 +122,8 @@ RETURNING CALLER:
     
     async def on_user_turn_completed(self, turn_ctx: ChatContext, new_message: ChatMessage) -> None:
         """
-        FIXED context injection with better search patterns
+        SIMPLIFIED context injection using LlamaIndex retrieval pattern
+        Much simpler than the previous over-engineered version
         """
         try:
             user_text = new_message.text_content
@@ -135,259 +132,54 @@ RETURNING CALLER:
             
             self.conversation_turns += 1
             
-            # Rate limiting with shorter intervals
-            current_time = time.time()
-            if current_time - self.last_rag_lookup < 0.3:  # Reduced for better responsiveness
+            # Skip for explicit transfers
+            transfer_phrases = ["transfer me", "human agent", "speak to a person"]
+            if any(phrase in user_text.lower() for phrase in transfer_phrases):
                 return
             
-            # Enhanced RAG trigger logic
-            if self._should_inject_rag_context(user_text):
-                self.last_rag_lookup = current_time
+            # Check if this looks like a question that needs knowledge base
+            if self._needs_knowledge_context(user_text):
+                # Use simplified RAG to get context
+                context = await simplified_rag.retrieve_context(user_text, max_results=2)
                 
-                rag_context = await self._get_enhanced_rag_context(user_text)
-                if rag_context:
-                    # Inject context in proper format
+                if context:
+                    # Inject context following LiveKit pattern
                     turn_ctx.add_message(
                         role="system",
-                        content=f"KNOWLEDGE BASE CONTEXT (from your Excel roadside assistance data):\n{rag_context}\n\nUse this EXACT information to answer the customer's question. This is from your official pricing and service database."
+                        content=f"KNOWLEDGE BASE CONTEXT: {context}\n\nUse this information to answer the customer's question accurately."
                     )
-                    logger.info(f"✅ RAG context injected for: {user_text[:50]}...")
-                else:
-                    logger.warning(f"⚠️ No RAG context found for: {user_text[:50]}...")
+                    logger.info(f"✅ Context injected for: {user_text[:50]}...")
             
-            # Add conversation guidance
+            # Add conversation guidance - preserved from your original
             self._inject_conversation_guidance(turn_ctx, user_text)
                     
         except Exception as e:
             logger.error(f"❌ Error in context injection: {e}")
     
-    def _should_inject_rag_context(self, user_text: str) -> bool:
-        """Enhanced logic to determine RAG injection"""
+    def _needs_knowledge_context(self, user_text: str) -> bool:
+        """Determine if we need knowledge base context - simplified logic"""
         user_lower = user_text.lower()
         
-        # Always inject for service-related queries
-        service_triggers = [
-            # Pricing keywords
-            "cost", "price", "how much", "fee", "charge", "rate", "pricing", "rates",
-            # Service keywords  
-            "service", "services", "towing", "battery", "tire", "jumpstart", "jump start",
+        # Service-related keywords
+        service_keywords = [
+            "cost", "price", "how much", "fee", "charge", "rate", "pricing",
+            "service", "services", "towing", "battery", "tire", "jumpstart",
             "fuel", "gas", "lockout", "locked", "flat", "dead", "replacement",
-            # Question patterns
             "what do you", "do you offer", "what services", "tell me", "provide",
             "available", "help", "assist", "need", "problem", "issue",
-            # Company info
             "hours", "business", "company", "contact", "phone",
-            # Membership
             "membership", "plan", "plans", "coverage"
         ]
         
-        # Don't inject for simple responses (unless asking for info)
-        simple_responses = ["yes", "no", "okay", "ok", "hello", "hi", "thanks", "thank you"]
-        
-        # Skip if it's just a simple response
+        # Skip simple responses
+        simple_responses = ["yes", "no", "okay", "ok", "hello", "hi", "thanks"]
         if len(user_text.split()) <= 2 and any(simple in user_lower for simple in simple_responses):
             return False
         
-        return any(trigger in user_lower for trigger in service_triggers)
-    
-    async def _get_enhanced_rag_context(self, query: str) -> Optional[str]:
-        """FIXED RAG context retrieval"""
-        try:
-            # Check cache first
-            cache_key = query.lower().strip()[:80]
-            if cache_key in self.rag_context_cache:
-                logger.debug("📚 Using RAG cache")
-                return self.rag_context_cache[cache_key]
-            
-            # Enhanced query processing for your Excel data
-            search_queries = self._create_targeted_queries(query)
-            
-            all_results = []
-            for search_query in search_queries[:3]:  # Try top 3 variants
-                try:
-                    logger.debug(f"Searching with query: {search_query}")
-                    results = await asyncio.wait_for(
-                        simple_rag.search(search_query, limit=config.search_limit),
-                        timeout=config.rag_timeout_ms / 1000.0
-                    )
-                    if results:
-                        all_results.extend(results)
-                        logger.debug(f"Found {len(results)} results for: {search_query}")
-                    else:
-                        logger.debug(f"No results for: {search_query}")
-                except Exception as e:
-                    logger.debug(f"Search failed for '{search_query}': {e}")
-                    continue
-            
-            if not all_results:
-                logger.warning("⚠️ No RAG results found for any query variant")
-                return None
-            
-            # Process results using FIXED thresholds
-            context = self._process_rag_results_fixed(all_results)
-            
-            # Cache successful results
-            if context:
-                self.rag_context_cache[cache_key] = context
-                if len(self.rag_context_cache) > 100:  # Larger cache
-                    oldest_key = next(iter(self.rag_context_cache))
-                    del self.rag_context_cache[oldest_key]
-            
-            return context
-            
-        except Exception as e:
-            logger.error(f"❌ RAG context error: {e}")
-            return None
-    
-    def _create_targeted_queries(self, query: str) -> List[str]:
-        """Create targeted queries for your Excel data"""
-        queries = [query]
-        query_lower = query.lower()
-        
-        # Map to your exact Excel content
-        if "battery" in query_lower or "jump" in query_lower or "dead" in query_lower:
-            queries.extend([
-                "battery jump start",
-                "battery replacement", 
-                "battery testing",
-                "dead battery assistance"
-            ])
-        elif "tire" in query_lower or "flat" in query_lower:
-            queries.extend([
-                "flat tire change",
-                "tire repair",
-                "tire inflation",
-                "spare tire"
-            ])
-        elif "tow" in query_lower:
-            queries.extend([
-                "towing standard sedan",
-                "towing SUV truck",
-                "long distance towing",
-                "emergency towing"
-            ])
-        elif "fuel" in query_lower or "gas" in query_lower:
-            queries.extend([
-                "fuel delivery",
-                "wrong fuel",
-                "emergency gas"
-            ])
-        elif "lock" in query_lower:
-            queries.extend([
-                "car lockout",
-                "key replacement",
-                "vehicle entry"
-            ])
-        elif "service" in query_lower and ("what" in query_lower or "which" in query_lower):
-            queries.extend([
-                "roadside assistance services",
-                "available services",
-                "service options"
-            ])
-        elif "cost" in query_lower or "price" in query_lower:
-            queries.extend([
-                "service pricing",
-                "rates charges",
-                "cost fees"
-            ])
-        
-        return queries
-    
-    def _process_rag_results_fixed(self, results: List[Dict]) -> Optional[str]:
-        """FIXED result processing using proper thresholds"""
-        if not results:
-            return None
-        
-        # Remove duplicates and sort by score
-        seen_texts = set()
-        unique_results = []
-        for result in sorted(results, key=lambda x: x.get("score", 0), reverse=True):
-            text = result.get("text", "")
-            if text and text not in seen_texts:
-                seen_texts.add(text)
-                unique_results.append(result)
-                if len(unique_results) >= 5:  # Keep more results
-                    break
-        
-        if not unique_results:
-            return None
-        
-        best_result = unique_results[0]
-        best_score = best_result.get("score", 0)
-        
-        logger.info(f"📊 Best RAG score: {best_score:.3f}")
-        
-        # Use FIXED thresholds from config
-        if best_score >= config.high_confidence_threshold:
-            # High confidence - use single best result
-            return self._format_excel_content(best_result["text"])
-        
-        elif best_score >= config.medium_confidence_threshold:
-            # Medium confidence - combine top results
-            combined_parts = []
-            for result in unique_results[:3]:  # Top 3
-                if result.get("score", 0) >= config.medium_confidence_threshold:
-                    formatted = self._format_excel_content(result["text"])
-                    if formatted and len(formatted) > 20:
-                        combined_parts.append(formatted)
-            
-            if combined_parts:
-                return " | ".join(combined_parts)
-            else:
-                return self._format_excel_content(best_result["text"])
-        
-        elif best_score >= config.minimum_usable_threshold:
-            # Lower confidence but still usable
-            return self._format_excel_content(best_result["text"])
-        
-        else:
-            # Score too low
-            logger.warning(f"⚠️ RAG score too low: {best_score:.3f} < {config.minimum_usable_threshold}")
-            return None
-    
-    def _format_excel_content(self, raw_text: str) -> str:
-        """Format Excel content for voice conversation"""
-        if not raw_text:
-            return ""
-        
-        # Clean up the text
-        cleaned = raw_text.strip()
-        
-        # Remove formatting characters
-        for char in ["•", "-", "*", "\n", "\t"]:
-            cleaned = cleaned.replace(char, " ")
-        
-        # Remove multiple spaces
-        while "  " in cleaned:
-            cleaned = cleaned.replace("  ", " ")
-        
-        # Optimize for voice - prioritize pricing information
-        if len(cleaned) > config.max_response_length:
-            sentences = cleaned.split(".")
-            
-            # Prioritize sentences with pricing and service information
-            priority_sentences = []
-            other_sentences = []
-            
-            for sentence in sentences:
-                sentence = sentence.strip()
-                if any(keyword in sentence.lower() for keyword in ["$", "cost", "price", "service", "fee"]):
-                    priority_sentences.append(sentence)
-                elif len(sentence) > 15:
-                    other_sentences.append(sentence)
-            
-            # Build result with priority content first
-            result_parts = priority_sentences[:2] + other_sentences[:1]  # More priority content
-            result = ". ".join(result_parts)
-            if result and not result.endswith("."):
-                result += "."
-        else:
-            result = cleaned
-        
-        return result.strip()
+        return any(keyword in user_lower for keyword in service_keywords)
     
     def _inject_conversation_guidance(self, turn_ctx: ChatContext, user_text: str):
-        """Inject conversation flow guidance"""
+        """Inject conversation flow guidance - preserved from your original"""
         guidance_parts = []
         
         # Check for explicit transfer requests
@@ -405,7 +197,6 @@ RETURNING CALLER:
             self.call_data.information_complete = True
             guidance_parts.append("INFO COMPLETE: All customer information collected")
         
-        # Add guidance if any
         if guidance_parts:
             turn_ctx.add_message(
                 role="system",
@@ -426,7 +217,7 @@ RETURNING CALLER:
         issue: str = None,
         service_needed: str = None
     ) -> str:
-        """Enhanced information gathering with better validation"""
+        """Enhanced information gathering - preserved from your original"""
         
         updates = []
         
@@ -477,7 +268,7 @@ RETURNING CALLER:
             context.userdata.gathered_info["service"] = True
             updates.append(f"service: {service_needed}")
         
-        # Log to call storage
+        # Log to call storage - preserved from your original
         if updates and context.userdata.session_id:
             try:
                 await call_storage.save_conversation_item(
@@ -518,16 +309,19 @@ RETURNING CALLER:
         context: RunContext[CallData],
         query: str
     ) -> str:
-        """FIXED knowledge base search with proper error handling"""
+        """
+        SIMPLIFIED knowledge base search using LlamaIndex patterns
+        Much simpler than the previous over-engineered version
+        """
         try:
             logger.info(f"🔍 Knowledge base search: {query}")
             
-            # Use the same enhanced search as context injection
-            rag_context = await self._get_enhanced_rag_context(query)
+            # Use simplified RAG system
+            context_text = await simplified_rag.retrieve_context(query, max_results=3)
             
-            if rag_context:
+            if context_text:
                 logger.info("📊 Knowledge base search successful")
-                return rag_context
+                return context_text
             else:
                 logger.warning("⚠️ No relevant information found in knowledge base")
                 return "I don't have specific information about that in my knowledge base right now. Let me help you with what I can, or would you like me to connect you with a specialist who can provide detailed information?"
@@ -542,13 +336,12 @@ RETURNING CALLER:
         context: RunContext[CallData],
         reason: str = "Customer requested human assistance"
     ) -> str:
-        """Request transfer (doesn't auto-transfer) - FIXED"""
+        """Request transfer - preserved from your original"""
         logger.info(f"💬 Transfer requested: {reason}")
         
         context.userdata.transfer_requested = True
         customer_name = context.userdata.caller_name or "there"
         
-        # Provide helpful response and ask for confirmation
         return f"I understand you'd like to speak with someone else, {customer_name}. Would you like me to connect you with one of our specialists? Just say 'yes, transfer me' to confirm."
 
     @function_tool()
@@ -557,7 +350,7 @@ RETURNING CALLER:
         context: RunContext[CallData],
         confirmed: bool = True
     ) -> str:
-        """Execute transfer only when confirmed - FIXED"""
+        """Execute transfer - preserved from your original"""
         if not confirmed:
             return "Just let me know if you'd like me to transfer you by saying 'yes, transfer me'."
         
@@ -620,7 +413,7 @@ RETURNING CALLER:
             return "I'm having trouble with the transfer. Let me continue helping you with your service request."
 
 async def identify_caller_with_history(ctx: JobContext) -> CallData:
-    """Enhanced caller identification"""
+    """Enhanced caller identification - preserved from your original"""
     try:
         participant = await ctx.wait_for_participant()
         
@@ -673,60 +466,33 @@ async def identify_caller_with_history(ctx: JobContext) -> CallData:
         return CallData()
 
 def prewarm(proc: JobProcess):
-    """Prewarm function to load models early"""
+    """Prewarm function - preserved from your original"""
     proc.userdata["vad"] = silero.VAD.load()
 
 async def entrypoint(ctx: JobContext):
     """
-    FINAL FIXED entrypoint with enhanced STT and RAG
+    IMPROVED entrypoint with simplified RAG system
+    Preserves all your features but uses much simpler RAG implementation
     """
     
-    logger.info("🚀 FINAL FIXED RAG Voice Agent Starting")
-    logger.info("🔧 Enhanced STT, RAG, and conversation flow")
+    logger.info("🚀 IMPROVED RAG Voice Agent Starting")
+    logger.info("🔧 Using simplified LlamaIndex-based RAG system")
     
     await ctx.connect()
     logger.info("✅ Connected to room")
     
-    # Initialize RAG with FIXED error handling
+    # Initialize simplified RAG system
     try:
         rag_start = time.time()
-        logger.info("🔧 Initializing FIXED RAG system...")
+        logger.info("🔧 Initializing simplified RAG system...")
         
-        # Initialize with proper retries
-        max_retries = 3
-        success = False
-        
-        for attempt in range(max_retries):
-            try:
-                success = await asyncio.wait_for(simple_rag.initialize(), timeout=20.0)
-                if success:
-                    break
-                else:
-                    logger.warning(f"RAG initialization attempt {attempt + 1} failed")
-                    if attempt < max_retries - 1:
-                        await asyncio.sleep(2)
-            except asyncio.TimeoutError:
-                logger.warning(f"RAG initialization attempt {attempt + 1} timed out")
-                if attempt < max_retries - 1:
-                    await asyncio.sleep(2)
-        
+        success = await simplified_rag.initialize()
         rag_time = (time.time() - rag_start) * 1000
         
         if success:
-            status = await simple_rag.get_status()
-            points_count = status.get("points_count", 0)
-            logger.info(f"✅ FIXED RAG system initialized in {rag_time:.1f}ms")
-            logger.info(f"📊 Knowledge base: {points_count} documents")
-            
-            if points_count == 0:
-                logger.error("❌ CRITICAL: Knowledge base is EMPTY!")
-                logger.error("💡 Run: python excel_ingest.py --file data/Roadside_Assist_Info.xlsx")
-                logger.error("💡 Agent will work but responses will be generic")
-            elif points_count < 20:
-                logger.warning(f"⚠️ Low document count: {points_count}")
-                logger.warning("💡 Consider adding more data to knowledge base")
-            else:
-                logger.info(f"✅ Good knowledge base size: {points_count} documents")
+            status = await simplified_rag.get_status()
+            logger.info(f"✅ Simplified RAG ready in {rag_time:.1f}ms")
+            logger.info(f"📊 RAG status: {status}")
         else:
             logger.error("❌ CRITICAL: RAG system failed to initialize!")
             logger.error("💡 Check: docker-compose up -d")
@@ -737,14 +503,14 @@ async def entrypoint(ctx: JobContext):
         logger.error(f"❌ RAG initialization error: {e}")
         success = False
     
-    # Identify caller and load history
+    # Identify caller and load history - preserved from your original
     call_data = await identify_caller_with_history(ctx)
     
-    # Create FIXED session with enhanced STT
+    # Create session with enhanced STT - preserved from your original
     session_params = {
         "vad": ctx.proc.userdata["vad"],
         
-        # ENHANCED STT configuration based on LiveKit examples
+        # Enhanced STT configuration
         "stt": deepgram.STT(
             model="nova-3",
             language="en-US",
@@ -762,10 +528,10 @@ async def entrypoint(ctx: JobContext):
         "userdata": call_data
     }
     
-    # Enhanced TTS setup
+    # Enhanced TTS setup - preserved from your original
     try:
         session_params["tts"] = elevenlabs.TTS(
-            voice_id="21m00Tcm4TlvDq8ikWAM",  # Professional voice
+            voice_id="21m00Tcm4TlvDq8ikWAM",
             voice_settings=elevenlabs.VoiceSettings(
                 stability=0.7, 
                 similarity_boost=0.8, 
@@ -779,7 +545,7 @@ async def entrypoint(ctx: JobContext):
         logger.warning(f"⚠️ ElevenLabs TTS failed, using OpenAI: {e}")
         session_params["tts"] = openai.TTS(voice="alloy")
     
-    # Add turn detection if available
+    # Add turn detection if available - preserved from your original
     if TURN_DETECTOR_AVAILABLE:
         session_params["turn_detection"] = MultilingualModel()
         logger.info("✅ Using semantic turn detection")
@@ -787,16 +553,16 @@ async def entrypoint(ctx: JobContext):
     # Create session
     session = AgentSession[CallData](**session_params)
     
-    # Create FIXED RAG agent
-    fixed_agent = FinalFixedRAGAgent(call_data)
+    # Create improved RAG agent
+    improved_agent = ImprovedRAGAgent(call_data)
     
     # Start session
     await session.start(
-        agent=fixed_agent,
+        agent=improved_agent,
         room=ctx.room
     )
     
-    # Generate contextual greeting
+    # Generate contextual greeting - preserved from your original
     if call_data.is_returning_caller:
         greeting = "Say: 'Welcome back! I see you've called us before. How can I help you today?'"
     else:
@@ -804,26 +570,22 @@ async def entrypoint(ctx: JobContext):
     
     await session.generate_reply(instructions=greeting)
     
-    # Log final status with FIXED configuration
-    logger.info("✅ FINAL FIXED RAG AGENT READY")
+    # Log final status with improved configuration
+    logger.info("✅ IMPROVED RAG AGENT READY")
     logger.info(f"📞 Session ID: {call_data.session_id}")
     logger.info(f"👤 Caller ID: {call_data.caller_id}")
     logger.info(f"📱 Phone: {call_data.phone_number}")
     logger.info(f"🔄 Returning: {call_data.is_returning_caller}")
     logger.info(f"📊 RAG System: {'✅ Active' if success else '⚠️ Disabled'}")
-    logger.info(f"🎯 FIXED Config: threshold={config.similarity_threshold}, timeout={config.rag_timeout_ms}ms")
     logger.info("🚫 Auto-transfer: DISABLED (only on explicit request)")
     logger.info("✅ Enhanced STT with better transcription")
-    logger.info("✅ Fixed RAG with targeted Excel data search")
+    logger.info("✅ Simplified RAG with LlamaIndex patterns")
 
 if __name__ == "__main__":
     try:
-        logger.info("🎙️ Starting FINAL FIXED RAG Voice Agent")
-        logger.info("📊 Fixed all issues from logs analysis")
-        logger.info("🔧 Enhanced STT, RAG, and conversation flow")
-        logger.info(f"⚙️ Fixed similarity threshold: {config.similarity_threshold}")
-        logger.info(f"⚙️ Fixed RAG timeout: {config.rag_timeout_ms}ms")
-        logger.info(f"⚙️ Enhanced search limit: {config.search_limit}")
+        logger.info("🎙️ Starting IMPROVED RAG Voice Agent")
+        logger.info("📊 Using simplified LlamaIndex-based RAG system")
+        logger.info("🔧 Following LiveKit RAG patterns for reliability")
         
         worker_options = WorkerOptions(
             entrypoint_fnc=entrypoint,
